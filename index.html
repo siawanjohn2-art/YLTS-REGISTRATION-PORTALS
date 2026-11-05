@@ -312,7 +312,7 @@ function renderDash(u){if(!u)return;
  $('#dCode').textContent=pst(u)==='verified'?u.code:'';
  const st=['Registered','Payment','Ticket'],at=pst(u)==='verified'?3:(u.regPay&&pst(u)!=='rejected'?2:1);
  $('#stat').innerHTML=st.map((s,i)=>`<div class="${i<at?'done':i===at?'now':''}">${s}</div>`).join('');
- $('#dl').innerHTML=[['Name',u.name],['Age',u.age],['Church',u.church],['Role',u.role],['Mobile',u.phone],['Email',u.email],['Fee',feeTxt(uFee(u))+(u.sib>1?' · sibling '+u.pos+' of '+u.sib+' ('+u.grp+')':'')],['Payment',{verified:'<span class="pill ok">Verified</span>',pending:'<span class="pill">Waiting for staff</span>',rejected:'<span class="pill" style="color:var(--bad)">Not confirmed</span>'}[pst(u)]||'<span class="pill">Unpaid</span>']].map(r=>`<dt>${r[0]}</dt><dd>${r[0]==='Payment'?r[1]:esc(r[1])}</dd>`).join('');
+ $('#dl').innerHTML=[['Name',u.name],['Age',u.age],['Church',u.church],['Role',u.role],['Mobile',u.phone],['Email',u.email],['Paid on',u.regPay?dt(u.regPay.date):'Not yet'],['Fee',feeTxt(uFee(u))+(u.sib>1?' · sibling '+u.pos+' of '+u.sib+' ('+u.grp+')':'')],['Payment',{verified:'<span class="pill ok">Verified</span>',pending:'<span class="pill">Waiting for staff</span>',rejected:'<span class="pill" style="color:var(--bad)">Not confirmed</span>'}[pst(u)]||'<span class="pill">Unpaid</span>']].map(r=>`<dt>${r[0]}</dt><dd>${r[0]==='Payment'?r[1]:esc(r[1])}</dd>`).join('');
  const T=[['Now','Pay the registration fee through GCash'],['Next','Staff confirm your payment and release your ticket code'],['Dec 28','Bring your ticket code and a valid ID to check-in']];
  $('#steps').innerHTML=T.map(t=>`<li><time style="min-width:56px">${t[0]}</time><span>${t[1]}</span></li>`).join('');
  $('#editCard').hidden=true;renderExtra(u)}
@@ -349,7 +349,7 @@ function renderExtra(u){$$('.qr').forEach(i=>i.src=QR);
  $('#feeAmt').textContent=peso(uFee(u));$('#shPrice').textContent=peso(CFG.SHIRT);shTotal();
  const ps=pst(u),paid=!!u.regPay&&ps!=='rejected';$('#ticket').hidden=ps!=='verified';$('#lockMsg').hidden=ps==='verified';$('#chk').hidden=ps!=='pending';$('#payCard').hidden=paid;
   $('#lockMsg').textContent=ps==='pending'?'Payment received. Your ticket unlocks once staff confirm your GCash payment.':ps==='rejected'?'We could not confirm your payment. Check the reference number and submit it again.':'Your ticket is locked. Pay the registration fee below to get your ticket code.';
- $('#orders').innerHTML=(u.orders||[]).map(o=>`<li><span>${o.qty} × ${esc(o.size)} · ${peso(o.total)} · Ref ${esc(o.ref)}</span></li>`).join('')||'<li class="hint">No shirt orders yet.</li>'}
+ $('#orders').innerHTML=(u.orders||[]).map(o=>`<li><span>${o.qty} × ${esc(o.size)} · ${peso(o.total)} · Ref ${esc(o.ref)} · ${dt(o.date)}</span></li>`).join('')||'<li class="hint">No shirt orders yet.</li>'}
 $('#shQty').oninput=shTotal;
 $('#payForm').onsubmit=async e=>{e.preventDefault();const r=$('#pRef').value.replace(/\s/g,''),er=$('#pErr');
  if(!refOk(r)){er.textContent='Enter the reference number from your GCash receipt (10 to 16 digits).';return}
@@ -370,11 +370,11 @@ async function pullSelf(){const em=sess();if(!em||!hasBin())return;try{const r=(
  if(r.regPay.status!==u.regPay.status||r.code!==u.code){u.regPay.status=r.regPay.status;u.code=r.code||null;store.set('ylts_users',a);renderDash(u)}}catch(e){}}
 $('#chk').onclick=async()=>{await pullSelf();toast(hasBin()?'Status refreshed':'Server sync is not connected')};
 let admOK=false,ADM=[],admTab='pay';
-const stOf=r=>pst(r)||'unpaid';
+const stOf=r=>pst(r)||'unpaid',dt=d=>d?new Date(d).toLocaleString('en-PH',{dateStyle:'medium',timeStyle:'short'}):'';
 $('#admForm').onsubmit=e=>{e.preventDefault();if($('#aPin').value!==CFG.ADMIN_PIN){$('#aErr').textContent='Wrong PIN.';return}admOK=true;$('#aErr').textContent='';e.target.reset();renderAdmin()};
 async function loadAdm(){let all={};if(hasBin()){try{all=await binAll()}catch(e){}}
  const l=users();for(const k in l){if(!all[k]){const r={...l[k]};delete r.pw;all[k]=r}}
- ADM=Object.values(all).sort((a,b)=>a.date<b.date?1:-1);$('#admMsg').textContent=hasBin()?'':'Server not connected: showing registrations from this device only.'}
+ ADM=Object.values(all).sort((a,b)=>((b.regPay&&b.regPay.date)||b.date)>((a.regPay&&a.regPay.date)||a.date)?1:-1);$('#admMsg').textContent=hasBin()?'':'Server not connected: showing registrations from this device only.'}
 async function renderAdmin(){$('#admForm').hidden=admOK;$('#admBox').hidden=!admOK;if(!admOK)return;await loadAdm();drawAdm()}
 function drawAdm(){const q=$('#admQ').value.trim().toLowerCase(),f=$('#admF').value,T=admTab;
  $('#admF').hidden=T!=='pay';$$('#admTabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===T));
@@ -382,19 +382,19 @@ function drawAdm(){const q=$('#admQ').value.trim().toLowerCase(),f=$('#admF').va
  $('#admStats').innerHTML=[['Registered',ADM.length],['Waiting',ADM.filter(r=>stOf(r)==='pending').length],['Verified',ver.length],['Arrived',ADM.filter(r=>r.arrived).length],['Collected',peso(ver.reduce((a,r)=>a+((r.regPay&&r.regPay.amount)||0),0))],['Shirts',orders.reduce((a,o)=>a+(+o.qty||0),0)]].map(x=>`<div><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
  const hay=r=>[r.name,r.church,r.email,r.phone,r.grp,r.code,r.regPay&&r.regPay.ref].join(' ').toLowerCase(),base=ADM.filter(r=>!q||hay(r).includes(q));
  const pill=s=>`<span class="pill${s==='verified'?' ok':''}"${s==='rejected'?' style="color:var(--bad)"':''}>${{pending:'Waiting',verified:'Verified',rejected:'Not confirmed',unpaid:'Unpaid'}[s]}</span>`;
- const info=r=>`<div><b>${esc(r.name)}</b> ${pill(stOf(r))}<div class="hint">${esc(r.church)} · ${esc(r.role||'')} · ${esc(r.phone)} · ${esc(r.email)}<br>${feeTxt(uFee(r))}${r.sib>1?' · sibling '+r.pos+' of '+r.sib+' · '+esc(r.grp):''}${r.regPay?' · GCash ref <b>'+esc(r.regPay.ref)+'</b>':''}${r.code?' · '+esc(r.code):''}</div></div>`;
+ const info=r=>`<div><b>${esc(r.name)}</b> ${pill(stOf(r))}<div class="hint">${esc(r.church)} · ${esc(r.role||'')} · ${esc(r.phone)} · ${esc(r.email)}<br>${feeTxt(uFee(r))}${r.sib>1?' · sibling '+r.pos+' of '+r.sib+' · '+esc(r.grp):''}${r.regPay?'<br>Paid <b>'+dt(r.regPay.date)+'</b> · GCash ref <b>'+esc(r.regPay.ref)+'</b>'+(r.regPay.checked?' · '+(stOf(r)==='verified'?'Confirmed ':'Checked ')+dt(r.regPay.checked):''):''}${r.code?' · '+esc(r.code):''}</div></div>`;
  let h='';
  if(T==='pay')h=base.filter(r=>f==='all'||stOf(r)===f).map(r=>`<div class="arow">${info(r)}${r.regPay?`<div class="row"><button class="btn sm" data-e="${esc(r.email)}" data-s="verified">Confirm</button><button class="btn ghost sm" data-e="${esc(r.email)}" data-s="rejected">Reject</button></div>`:''}</div>`).join('');
  if(T==='chk')h=base.filter(r=>stOf(r)==='verified').map(r=>`<div class="arow">${info(r)}${r.arrived?'<span class="pill ok">Arrived</span>':`<button class="btn sm" data-e="${esc(r.email)}" data-a="1">Mark arrived</button>`}</div>`).join('');
  if(T==='ship'){const by={};orders.forEach(o=>by[o.size]=(by[o.size]||0)+(+o.qty||0));
-  h=(orders.length?`<p class="hint">Totals: ${Object.entries(by).map(([k,v])=>k+' × '+v).join(' · ')}</p>`:'')+orders.map(o=>`<div class="arow"><div><b>${esc(o.who)}</b><div class="hint">${esc(o.ch)} · ${o.qty} × ${esc(o.size)} · ${peso(o.total)} · ref ${esc(o.ref)}</div></div></div>`).join('')}
+  h=(orders.length?`<p class="hint">Totals: ${Object.entries(by).map(([k,v])=>k+' × '+v).join(' · ')}</p>`:'')+orders.map(o=>`<div class="arow"><div><b>${esc(o.who)}</b><div class="hint">${esc(o.ch)} · ${o.qty} × ${esc(o.size)} · ${peso(o.total)} · ref ${esc(o.ref)} · ${dt(o.date)}</div></div></div>`).join('')}
  if(T==='fam'){const g={};base.filter(r=>r.sib>1).forEach(r=>(g[r.grp]=g[r.grp]||[]).push(r));
   h=Object.entries(g).map(([k,m])=>{const n=m[0].sib,dup=new Set(m.map(r=>r.pos)).size<m.length;return `<div class="arow"><div><b>${esc(k)}</b> ${m.length===n&&!dup?'<span class="pill ok">Complete</span>':'<span class="pill">'+(dup?'Check positions':m.length+' of '+n+' registered')+'</span>'}<div class="hint">${m.sort((a,b)=>a.pos-b.pos).map(r=>esc(r.name)+' (#'+r.pos+', '+feeTxt(uFee(r))+')').join('<br>')}</div></div></div>`}).join('')}
  $('#admList').innerHTML=`<div class="card" style="margin-top:12px">${h||'<p class="hint">Nothing to show here yet.</p>'}</div>`}
 async function adminPatch(em,fn){
  if(hasBin()){try{const all=await binAll();if(all[em]){fn(all[em]);await fetch(bin,{method:'PUT',headers:hdr,body:JSON.stringify({registrations:all})})}}catch(e){}}
  const a=users();if(a[em]){fn(a[em]);store.set('ylts_users',a)}}
-const setSt=(em,st)=>{const c=code();return adminPatch(em,r=>{if(!r.regPay)return;r.regPay.status=st;r.code=st==='verified'?(r.code||c):null})};
+const setSt=(em,st)=>{const c=code();return adminPatch(em,r=>{if(!r.regPay)return;r.regPay.status=st;r.regPay.checked=new Date().toISOString();r.code=st==='verified'?(r.code||c):null})};
 $('#admTabs').onclick=e=>{const b=e.target.closest('button');if(b){admTab=b.dataset.t;drawAdm()}};
 $('#admQ').oninput=$('#admF').onchange=drawAdm;
 $('#admList').onclick=async e=>{const b=e.target.closest('button[data-e]');if(!b)return;b.disabled=true;
@@ -402,8 +402,8 @@ $('#admList').onclick=async e=>{const b=e.target.closest('button[data-e]');if(!b
  toast(b.dataset.a?'Marked arrived':b.dataset.s==='verified'?'Payment confirmed':'Payment rejected');await loadAdm();drawAdm()};
 $('#admRef').onclick=async()=>{await loadAdm();drawAdm()};
 $('#admOut').onclick=()=>{admOK=false;renderAdmin()};
-$('#admCsv').onclick=()=>{const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',h=['Name','Age','Church','Role','Phone','Email','Siblings','Position','Family code','Fee','Status','GCash ref','Ticket code','Arrived','Registered'];
- const rows=ADM.map(r=>[r.name,r.age,r.church,r.role,r.phone,r.email,r.sib||1,r.pos||1,r.grp||'',uFee(r),stOf(r),r.regPay?r.regPay.ref:'',r.code||'',r.arrived||'',r.date]);
+$('#admCsv').onclick=()=>{const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',h=['Name','Age','Church','Role','Phone','Email','Siblings','Position','Family code','Fee','Status','Payment time','Confirmed time','GCash ref','Ticket code','Arrived','Registered'];
+ const rows=ADM.map(r=>[r.name,r.age,r.church,r.role,r.phone,r.email,r.sib||1,r.pos||1,r.grp||'',uFee(r),stOf(r),r.regPay?dt(r.regPay.date):'',r.regPay?dt(r.regPay.checked):'',r.regPay?r.regPay.ref:'',r.code||'',r.arrived||'',r.date]);
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+[h,...rows].map(x=>x.map(q).join(',')).join('\n')],{type:'text/csv'}));a.download='ylts26-registrations.csv';a.click()};
 
 route();
