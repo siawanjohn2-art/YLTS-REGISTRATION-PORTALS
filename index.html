@@ -452,7 +452,7 @@ $('#shForm').onsubmit=async e=>{e.preventDefault();const r=$('#shRef').value.rep
 const pst=u=>u.regPay?(u.regPay.status||'verified'):'',hasBin=()=>CFG.BIN_ID&&CFG.BIN_ID!=='PASTE_BIN_ID_HERE';
 const hdr={'Content-Type':'application/json','X-Access-Key':CFG.KEY},bin='https://api.jsonbin.io/v3/b/'+CFG.BIN_ID;
 let lastErr='';
-async function jb(method,body,path){let msg='';for(const h of ['X-Access-Key','X-Master-Key']){const r=await fetch(bin+(path||''),{method,headers:{'Content-Type':'application/json',[h]:CFG.KEY},body});if(r.status===401||r.status===403){try{msg=(await r.json()).message||''}catch(e){}continue}return r}throw new Error('Key rejected by JSONBin'+(msg?': '+msg:'')+'. Use an Access Key with Read and Update permission.')}
+async function jb(method,body,path){const r=await fetch(bin+(path||''),{method,headers:{'Content-Type':'application/json','X-Access-Key':CFG.KEY},body});if(r.status===401||r.status===403){let m='';try{m=(await r.json()).message||''}catch(e){}throw new Error('Key rejected by JSONBin'+(m?': '+m:'')+'. Use an Access Key with Read and Update permission.')}return r}
 async function binAll(){const r=await jb('GET',undefined,'/latest');const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(r.status+' '+(j.message||'JSONBin error')+(r.status===404?' (check the Bin ID)':''));return (j.record&&j.record.registrations)||{}}
 async function pullSelf(){const em=sess();if(!em||!hasBin())return;try{const r=(await binAll())[em],a=users(),u=a[em];
  if(!r||!u||!r.regPay||!u.regPay||r.regPay.ref!==u.regPay.ref)return;
